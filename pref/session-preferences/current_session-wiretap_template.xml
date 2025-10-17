@@ -1,13 +1,13 @@
 <?xml version='1.0' encoding='utf-8'?>
 <Project>
-  <Name>21285_marcus_haney_on_fire_under_fire_2026_1_ThomR</Name>
-  <Nickname>21285_marcus_haney_on_fire_under_fire</Nickname>
-  <ShotgunProjectName>21285_marcus_haney_on_fire_under_fire</ShotgunProjectName>
+  <Name>666_test_home_2026_1_ThomR</Name>
+  <Nickname>666_test_home</Nickname>
+  <ShotgunProjectName>666_test_home</ShotgunProjectName>
   <Description />
-  <CatalogDir>/var/opt/Autodesk/flame/projects/21285_marcus_haney_on_fire_under_fire_2026_1_ThomR/catalog</CatalogDir>
-  <ProjectDir>/var/opt/Autodesk/flame/projects/21285_marcus_haney_on_fire_under_fire_2026_1_ThomR</ProjectDir>
-  <SetupDir>/var/opt/Autodesk/flame/projects/21285_marcus_haney_on_fire_under_fire_2026_1_ThomR/setups</SetupDir>
-  <MediaDir>/var/opt/Autodesk/flame/projects/21285_marcus_haney_on_fire_under_fire_2026_1_ThomR/media</MediaDir>
+  <CatalogDir>/var/opt/Autodesk/flame/projects/666_test_2026_1_ThomR/catalog</CatalogDir>
+  <ProjectDir>/var/opt/Autodesk/flame/projects/666_test_2026_1_ThomR</ProjectDir>
+  <SetupDir>/var/opt/Autodesk/flame/projects/666_test_2026_1_ThomR/setups</SetupDir>
+  <MediaDir>/var/opt/Autodesk/flame/projects/666_test_2026_1_ThomR/media</MediaDir>
   <Version>2026.1</Version>
   <FrameWidth>3840</FrameWidth>
   <FrameHeight>2160</FrameHeight>

@@ -23,6 +23,7 @@
 
 from PySide6.QtCore import (
     QThread,
+    QTimer,
     QObject,
     Signal,
     Slot
@@ -86,6 +87,7 @@ class Worker(QObject):
     error = Signal(str)
     template_imported = Signal(dict, dict)
     template_exported = Signal(str, str)
+    projekt_summary_ready = Signal(dict)
 
     def __init__(self, app_logic):
         super().__init__()
@@ -149,11 +151,28 @@ class Worker(QObject):
         finally:
             self.finished.emit()
 
+    @Slot(dict, dict, dict)
+    def get_projekt_summary_data(self, template_info_data, filtered_template_params_data, flame_options):
+        """Run the potentially expensive get_projekt_summary_data in the worker thread
+        and emit the resulting projekt summary dict via projekt_summary_ready.
+        """
+        try:
+            # Convert dicts to dataclasses expected by app_logic
+            projekt_summary_data = self.app_logic.get_projekt_summary_data(
+                TemplateInfo(**template_info_data),
+                TemplateParameters(**filtered_template_params_data),
+                flame_options,
+            )
+            self.projekt_summary_ready.emit(projekt_summary_data)
+        except Exception as e:
+            self.error.emit(str(e))
+
 
 class AppWindow(QMainWindow):
     create_projekt_requested = Signal(dict)
     export_template_requested = Signal(dict, dict, str)
     import_template_requested = Signal(str)
+    projekt_summary_requested = Signal(dict, dict, dict)
 
     def __init__(self):
         super().__init__()
@@ -249,7 +268,7 @@ class AppWindow(QMainWindow):
         logging.getLogger().addHandler(self.log_handler)
         logging.getLogger().setLevel(logging.DEBUG)
 
-        self._update_all_summaries()
+    # Initial summary update will be triggered after worker/thread/timer setup
 
         self.template_summary_panel.export_button.button.clicked.connect(
             self._export_template_json
@@ -296,8 +315,22 @@ class AppWindow(QMainWindow):
         self.import_template_requested.connect(
             self.worker.import_template_json
         )
+        # Connect request for projekt summary calculation to worker slot
+        self.projekt_summary_requested.connect(self.worker.get_projekt_summary_data)
 
         self.thread.start()
+
+        # Debounce timer to prevent rapid, blocking summary recalculations
+        self._summary_debounce_timer = QTimer(self)
+        self._summary_debounce_timer.setSingleShot(True)
+        self._summary_debounce_timer.setInterval(250)  # ms
+        self._summary_debounce_timer.timeout.connect(self._perform_summary_update)
+
+        # Worker signal for projekt summary ready
+        self.worker.projekt_summary_ready.connect(self.on_projekt_summary_ready)
+
+        # Now run the initial summary update (safe: timer and worker exist)
+        self._update_all_summaries()
 
     def on_worker_finished(self):
         logging.info("Worker thread finished.")
@@ -328,6 +361,7 @@ class AppWindow(QMainWindow):
         self._update_all_summaries()
 
     def _update_all_summaries(self):
+        # Gather basic UI state and update summary panel immediately with cheap data
         template_info_data = self.template_info_panel.get_template_info()
         template_params_data = (
             self.template_parameters_panel.get_template_parameters()
@@ -336,10 +370,12 @@ class AppWindow(QMainWindow):
             **template_info_data,
             **template_params_data
         }
+        # Quick UI-only update (cheap)
         self.template_summary_panel.set_template_summary_panel_data(
             combined_template_data
         )
 
+    # Prepare filtered params and flame options for expensive calculation
         template_parameters_keys = [
             "template_resolution",
             "template_resolution_w",
@@ -363,81 +399,107 @@ class AppWindow(QMainWindow):
             if k in template_params_data
         }
 
+        # Keep a reference to the full params for later UI updates
+        self._pending_full_params = template_params_data
+
         flame_options = (
             self.flame_options_panel.get_flame_options()
         )
 
-        projekt_summary_data = (
-            self.app_logic.get_projekt_summary_data(
-                TemplateInfo(**template_info_data),
-                TemplateParameters(**filtered_template_params_data),
-                flame_options,
+        # Debounce and offload the expensive calculation to the worker thread
+        # Store the prepared data on the instance for the timer callback
+        self._pending_template_info = template_info_data
+        self._pending_filtered_params = filtered_template_params_data
+        self._pending_flame_options = flame_options
+        self._summary_debounce_timer.start()
+
+    def _perform_summary_update(self):
+        """Emit a request for the worker to compute the projekt summary.
+
+        This runs in the GUI thread but immediately queues the heavy work
+        to the worker thread via the signal-slot connection.
+        """
+        try:
+            self.projekt_summary_requested.emit(
+                self._pending_template_info,
+                self._pending_filtered_params,
+                self._pending_flame_options,
             )
-        )
+        except Exception as e:
+            logging.exception(f"Failed to request projekt summary: {e}")
 
-        full_flame_projekt_name = projekt_summary_data.get(
-            "flame_projekt_name",
-            ""
-        )
-        self.flame_options_panel.set_project_name(full_flame_projekt_name)
+    @Slot(dict)
+    def on_projekt_summary_ready(self, projekt_summary_data):
+        """Receive projekt summary from worker and update UI. Runs on GUI thread."""
+        try:
+            full_flame_projekt_name = projekt_summary_data.get(
+                "flame_projekt_name", ""
+            )
+            self.flame_options_panel.set_project_name(full_flame_projekt_name)
 
-        self.projekt_summary_panel.set_projekt_summary_data(
-            projekt_summary_data
-        )
+            self.projekt_summary_panel.set_projekt_summary_data(
+                projekt_summary_data
+            )
 
-        self.projekt_template_panel.set_projekt_template_data({
-            "projekt_serial_number": template_info_data.get(
-                "template_serial_number"
-            ),
-            "projekt_client_name": template_info_data.get(
-                "template_client_name"
-            ),
-            "projekt_campaign_name": template_info_data.get(
-                "template_campaign_name"
-            ),
-            "projekt_calculated_name": template_info_data.get(
-                "template_calculated_name"
-            ),
-            "projekt_description": template_info_data.get(
-                "template_description"
-            ),
-            "projekt_resolution": template_params_data.get(
-                "template_resolution"
-            ),
-            "projekt_resolution_w": template_params_data.get(
-                "template_resolution_w"
-            ),
-            "projekt_resolution_h": template_params_data.get(
-                "template_resolution_h"
-            ),
-            "projekt_aspect_ratio": template_params_data.get(
-                "template_aspect_ratio"
-            ),
-            "projekt_bit_depth": template_params_data.get(
-                "template_bit_depth"
-            ),
-            "projekt_framerate": template_params_data.get(
-                "template_framerate"
-            ),
-            "projekt_scan_mode": template_params_data.get(
-                "template_scan_mode"
-            ),
-            "projekt_start_frame": template_params_data.get(
-                "template_start_frame"
-            ),
-            "projekt_init_config": template_params_data.get(
-                "template_init_config"
-            ),
-            "projekt_ocio_name": projekt_summary_data.get(
-                "flame_projekt_ocio_name"
-            ),
-            "projekt_cache_integer_id": template_params_data.get(
-                "template_cache_integer_id"
-            ),
-            "projekt_cache_float_id": template_params_data.get(
-                "template_cache_float_id"
-            ),
-        })
+            # Update projekt_template_panel using the pending full params and template info
+            template_info_data = getattr(self, '_pending_template_info', {}) or {}
+            template_params_data = getattr(self, '_pending_full_params', {}) or {}
+
+            self.projekt_template_panel.set_projekt_template_data({
+                "projekt_serial_number": template_info_data.get(
+                    "template_serial_number"
+                ),
+                "projekt_client_name": template_info_data.get(
+                    "template_client_name"
+                ),
+                "projekt_campaign_name": template_info_data.get(
+                    "template_campaign_name"
+                ),
+                "projekt_calculated_name": template_info_data.get(
+                    "template_calculated_name"
+                ),
+                "projekt_description": template_info_data.get(
+                    "template_description"
+                ),
+                "projekt_resolution": template_params_data.get(
+                    "template_resolution"
+                ),
+                "projekt_resolution_w": template_params_data.get(
+                    "template_resolution_w"
+                ),
+                "projekt_resolution_h": template_params_data.get(
+                    "template_resolution_h"
+                ),
+                "projekt_aspect_ratio": template_params_data.get(
+                    "template_aspect_ratio"
+                ),
+                "projekt_bit_depth": template_params_data.get(
+                    "template_bit_depth"
+                ),
+                "projekt_framerate": template_params_data.get(
+                    "template_framerate"
+                ),
+                "projekt_scan_mode": template_params_data.get(
+                    "template_scan_mode"
+                ),
+                "projekt_start_frame": template_params_data.get(
+                    "template_start_frame"
+                ),
+                "projekt_init_config": template_params_data.get(
+                    "template_init_config"
+                ),
+                "projekt_ocio_name": projekt_summary_data.get(
+                    "flame_projekt_ocio_name"
+                ),
+                "projekt_cache_integer_id": template_params_data.get(
+                    "template_cache_integer_id"
+                ),
+                "projekt_cache_float_id": template_params_data.get(
+                    "template_cache_float_id"
+                ),
+            })
+        except Exception as e:
+            logging.exception(f"Error updating UI from projekt summary: {e}")
 
     def _export_template_json(self):
         logging.info(

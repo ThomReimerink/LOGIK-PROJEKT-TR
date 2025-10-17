@@ -1,8 +1,8 @@
 {
-    "Name": "21285_marcus_haney_on_fire_under_fire_2026_1_ThomR",
-    "ProjectDir": "/var/opt/Autodesk/flame/projects/21285_marcus_haney_on_fire_under_fire_2026_1_ThomR",
-    "SetupDir": "/var/opt/Autodesk/flame/projects/21285_marcus_haney_on_fire_under_fire_2026_1_ThomR/setups",
-    "MediaDir": "/var/opt/Autodesk/flame/projects/21285_marcus_haney_on_fire_under_fire_2026_1_ThomR/media",
+    "Name": "666_test_home_2026_1_ThomR",
+    "ProjectDir": "/var/opt/Autodesk/flame/projects/666_test_2026_1_ThomR",
+    "SetupDir": "/var/opt/Autodesk/flame/projects/666_test_2026_1_ThomR/setups",
+    "MediaDir": "/var/opt/Autodesk/flame/projects/666_test_2026_1_ThomR/media",
     "Resolution": {
         "FrameWidth": 3840,
         "FrameHeight": 2160,
